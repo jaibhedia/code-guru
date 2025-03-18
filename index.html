@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Slow-Paced Copilot</title>
+    <script>
+        function updateText() {
+            let inputBox = document.getElementById("codeInput");
+            window.electronAPI.sendToMain('get-next-letter', inputBox.value);
+        }
+
+        window.electronAPI.receiveFromMain('next-letter', (data) => {
+            document.getElementById("hintBox").innerText = "Hint: " + (data.hint || "Kuch likho bhai!");
+        });
+    </script>
+</head>
+<body>
+    <h1>Slow-Paced Copilot</h1>
+    <textarea id="codeInput" onkeyup="updateText()"></textarea>
+    <p id="hintBox">Hint: Start Typing...</p>
+</body>
+</html>
