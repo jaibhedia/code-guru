@@ -4,7 +4,7 @@ import openai
 
 app = FastAPI()
 
-openai.api_key = "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"
+openai.api_key = ""
 
 class CodeRequest(BaseModel):
     user_input: str
