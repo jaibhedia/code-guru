@@ -2,21 +2,957 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Slow-Paced Copilot</title>
-    <script>
-        function updateText() {
-            let inputBox = document.getElementById("codeInput");
-            window.electronAPI.sendToMain('get-next-letter', inputBox.value);
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CodeTeach - Interactive Coding Assistant</title>
+    <style>
+        :root {
+            --primary: #3b82f6;
+            --primary-dark: #2563eb;
+            --secondary: #10b981;
+            --dark: #1e293b;
+            --light: #f8fafc;
+            --gray: #64748b;
+            --error: #ef4444;
         }
-
-        window.electronAPI.receiveFromMain('next-letter', (data) => {
-            document.getElementById("hintBox").innerText = "Hint: " + (data.hint || "Kuch likho bhai!");
-        });
-    </script>
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+        }
+        
+        body {
+            background-color: var(--light);
+            color: var(--dark);
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 1rem;
+        }
+        
+        header {
+            background-color: var(--dark);
+            color: white;
+            padding: 1rem 0;
+            margin-bottom: 2rem;
+        }
+        
+        header .container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--secondary);
+        }
+        
+        main {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+        
+        @media (max-width: 768px) {
+            main {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .card {
+            background-color: white;
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 1.5rem;
+        }
+        
+        h2 {
+            margin-bottom: 1rem;
+            color: var(--dark);
+        }
+        
+        .btn {
+            display: inline-block;
+            background-color: var(--primary);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 0.25rem;
+            text-decoration: none;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        
+        .btn:hover {
+            background-color: var(--primary-dark);
+        }
+        
+        .btn-secondary {
+            background-color: var(--secondary);
+        }
+        
+        .btn-secondary:hover {
+            background-color: #0da271;
+        }
+        
+        .editor-container {
+            position: relative;
+            font-family: monospace;
+            border: 1px solid #ccc;
+            border-radius: 0.25rem;
+            height: 400px;
+            margin-bottom: 1rem;
+        }
+        
+        #codeEditor {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            padding: 1rem;
+            font-family: monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            resize: none;
+            background-color: transparent;
+            color: #000;
+            z-index: 2;
+            border: none;
+            outline: none;
+        }
+        
+        #ghostText {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            padding: 1rem;
+            font-family: monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            color: #aaa;
+            z-index: 1;
+            pointer-events: none;
+            white-space: pre;
+            overflow: auto;
+        }
+        
+        #outputDisplay {
+            padding: 1rem;
+            background-color: #f1f5f9;
+            border-radius: 0.25rem;
+            min-height: 200px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            overflow: auto;
+            height: 400px;
+        }
+        
+        .progress-container {
+            width: 100%;
+            height: 4px;
+            background-color: #e2e8f0;
+            border-radius: 2px;
+            margin-bottom: 1rem;
+            overflow: hidden;
+        }
+        
+        #progressBar {
+            height: 100%;
+            width: 0;
+            background-color: var(--secondary);
+            transition: width 0.2s;
+        }
+        
+        #promptInput {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #ccc;
+            border-radius: 0.25rem;
+            margin-bottom: 1rem;
+            font-family: inherit;
+        }
+        
+        .instructions-container {
+            margin-top: 1rem;
+            padding: 1rem;
+            background-color: #f1f5f9;
+            border-radius: 0.25rem;
+            border-left: 4px solid var(--secondary);
+        }
+        
+        .instructions-container h3 {
+            margin-bottom: 0.5rem;
+            color: var(--dark);
+        }
+        
+        .code-section {
+            margin-bottom: 1.5rem;
+        }
+        
+        .code-section h3 {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0.5rem;
+            font-size: 1rem;
+            color: var(--dark);
+        }
+        
+        .code-section h3 .status-icon {
+            margin-right: 0.5rem;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+        }
+        
+        .status-pending {
+            background-color: #cbd5e1;
+        }
+        
+        .status-active {
+            background-color: #fbbf24;
+        }
+        
+        .status-complete {
+            background-color: #22c55e;
+        }
+        
+        #loadingIndicator {
+            display: none;
+            margin-top: 1rem;
+            color: var(--gray);
+        }
+        
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(0, 0, 0, 0.1);
+            border-left-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 0.5rem;
+        }
+        
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+        
+        .buttons-container {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+        
+        .hint {
+            margin-top: 0.5rem;
+            padding: 0.5rem;
+            background-color: #fffbeb;
+            border-left: 2px solid #fbbf24;
+            font-size: 0.9rem;
+        }
+        
+        .api-key-container {
+            margin-bottom: 1.5rem;
+        }
+        
+        #apiKeyInput {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #ccc;
+            border-radius: 0.25rem;
+            margin-bottom: 0.5rem;
+            font-family: inherit;
+        }
+    </style>
 </head>
 <body>
-    <h1>Slow-Paced Copilot</h1>
-    <textarea id="codeInput" onkeyup="updateText()"></textarea>
-    <p id="hintBox">Hint: Start Typing...</p>
+    <header>
+        <div class="container">
+            <div class="logo">CodeTeach</div>
+        </div>
+    </header>
+    
+    <div class="container">
+        <main>
+            <div>
+                <div class="card api-key-container">
+                    <h2>OpenAI API Setup</h2>
+                    <p>Enter your OpenAI API key to enable the assistant:</p>
+                    <input type="password" id="apiKeyInput" placeholder="Enter your OpenAI API key">
+                    <p class="hint">Your API key is stored locally in your browser and is never sent to our servers.</p>
+                </div>
+                
+                <div class="card">
+                    <h2>What would you like to create?</h2>
+                    <input type="text" id="promptInput" placeholder="E.g., 'A login page with HTML, CSS, and form validation'">
+                    <button id="generateBtn" class="btn">Generate Structure</button>
+                    <div id="loadingIndicator">
+                        <span class="loading-spinner"></span>
+                        Generating code structure...
+                    </div>
+                    
+                    <div class="instructions-container" id="instructionsContainer" style="display: none;">
+                        <h3>Project Structure</h3>
+                        <div id="structureOutline"></div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h2>Current Task</h2>
+                    <div id="currentTask">
+                        <p>No active task. Generate a structure to begin.</p>
+                    </div>
+                    
+                    <div class="progress-container">
+                        <div id="progressBar"></div>
+                    </div>
+                    
+                    <div class="editor-container">
+                        <textarea id="codeEditor" placeholder="Your code will appear here..."></textarea>
+                        <div id="ghostText"></div>
+                    </div>
+                    
+                    <div class="buttons-container">
+                        <button id="runBtn" class="btn">Run Code</button>
+                        <button id="skipBtn" class="btn btn-secondary">Skip to Next</button>
+                        <button id="hintBtn" class="btn">Get Hint</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div>
+                <div class="card">
+                    <h2>Output</h2>
+                    <div id="outputDisplay">Your output will appear here...</div>
+                </div>
+                
+                <div class="card">
+                    <h2>Project Overview</h2>
+                    <div id="projectSections"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // DOM Elements
+        const apiKeyInput = document.getElementById('apiKeyInput');
+        const promptInput = document.getElementById('promptInput');
+        const generateBtn = document.getElementById('generateBtn');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const instructionsContainer = document.getElementById('instructionsContainer');
+        const structureOutline = document.getElementById('structureOutline');
+        const codeEditor = document.getElementById('codeEditor');
+        const ghostText = document.getElementById('ghostText');
+        const outputDisplay = document.getElementById('outputDisplay');
+        const currentTask = document.getElementById('currentTask');
+        const projectSections = document.getElementById('projectSections');
+        const progressBar = document.getElementById('progressBar');
+        const runBtn = document.getElementById('runBtn');
+        const skipBtn = document.getElementById('skipBtn');
+        const hintBtn = document.getElementById('hintBtn');
+
+        // Application State
+        let projectStructure = [];
+        let currentSectionIndex = -1;
+        let completeCode = '';
+        let isGhostTextVisible = false;
+        let currentCompletionIndex = 0;
+        let apiKey = localStorage.getItem('openaiApiKey') || '';
+
+        // Initialize
+        init();
+
+        function init() {
+            // Restore API key if available
+            if (apiKey) {
+                apiKeyInput.value = apiKey;
+            }
+
+            // Event Listeners
+            apiKeyInput.addEventListener('change', saveApiKey);
+            generateBtn.addEventListener('click', generateProjectStructure);
+            codeEditor.addEventListener('input', handleCodeEditorInput);
+            runBtn.addEventListener('click', runCode);
+            skipBtn.addEventListener('click', moveToNextSection);
+            hintBtn.addEventListener('click', showHint);
+            
+            // Disable editor initially
+            codeEditor.disabled = true;
+        }
+
+        function saveApiKey() {
+            apiKey = apiKeyInput.value.trim();
+            localStorage.setItem('openaiApiKey', apiKey);
+        }
+
+        async function generateProjectStructure() {
+            const prompt = promptInput.value.trim();
+            if (!prompt) {
+                alert('Please enter what you want to create.');
+                return;
+            }
+            
+            if (!apiKey) {
+                alert('Please enter your OpenAI API key.');
+                return;
+            }
+            
+            // Show loading
+            loadingIndicator.style.display = 'block';
+            generateBtn.disabled = true;
+            
+            try {
+                // Call the OpenAI API with proper error handling
+                const structure = await callOpenAIAPI(prompt);
+                
+                // Process and display the structure
+                projectStructure = structure;
+                displayProjectStructure();
+                
+                // Start with the first section
+                currentSectionIndex = -1;
+                moveToNextSection();
+                
+                // Show the instructions container
+                instructionsContainer.style.display = 'block';
+                
+                // Enable the editor
+                codeEditor.disabled = false;
+            } catch (error) {
+                console.error('Error generating structure:', error);
+                alert(`Error: ${error.message || 'Failed to generate structure. Please try again.'}`);
+            } finally {
+                // Hide loading
+                loadingIndicator.style.display = 'none';
+                generateBtn.disabled = false;
+            }
+        }
+
+        async function callOpenAIAPI(prompt) {
+            try {
+                const response = await fetch('https://api.openai.com/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`
+                    },
+                    body: JSON.stringify({
+                        model: 'gpt-4',
+                        messages: [
+                            {
+                                role: 'system',
+                                content: `You are a coding assistant that provides detailed step-by-step guidance for creating code projects.
+                                Format your response as follows:
+                                
+                                ## Section Title 1
+                                Description of this section's purpose.
+                                
+                                \`\`\`language
+                                Code for this section
+                                \`\`\`
+                                
+                                Hint: A helpful hint for implementing this section
+                                
+                                ## Section Title 2
+                                ... (and so on for each section)`
+                            },
+                            {
+                                role: 'user',
+                                content: `Generate a structured outline for: ${prompt}. Include separate sections for different parts of the code (HTML, CSS, JS functions, etc). For each section, provide a title, description, the complete code, and a helpful hint.`
+                            }
+                        ],
+                        temperature: 0.7
+                    })
+                });
+                
+                if (!response.ok) {
+                    let errorMessage = `API request failed with status ${response.status}`;
+                    try {
+                        const errorData = await response.json();
+                        errorMessage = errorData.error?.message || errorMessage;
+                    } catch (e) {
+                        // Ignore JSON parsing errors for error response
+                    }
+                    throw new Error(errorMessage);
+                }
+                
+                const data = await response.json();
+                
+                // Get content from response
+                const content = data.choices[0].message.content;
+                
+                // Process the content into our expected format
+                return processOpenAIResponse(content);
+            } catch (error) {
+                throw new Error(`OpenAI API error: ${error.message}`);
+            }
+        }
+
+        function processOpenAIResponse(content) {
+            // Default section if parsing fails
+            const defaultSection = {
+                title: "Generated Code",
+                description: "The AI generated the following content:",
+                code: content,
+                hint: "Follow the code structure shown in the ghost text."
+            };
+            
+            try {
+                // First, try to parse as JSON directly
+                try {
+                    const jsonData = JSON.parse(content);
+                    if (Array.isArray(jsonData) && jsonData.length > 0 && jsonData[0].title) {
+                        return jsonData;
+                    }
+                } catch (e) {
+                    // Not JSON, continue with markdown parsing
+                }
+                
+                // Look for markdown section headers (## Section Title)
+                const sections = [];
+                const sectionMatches = content.split(/(?=##\s+)/);
+                
+                // Skip first element if it's empty
+                const startIndex = sectionMatches[0].trim() === '' ? 1 : 0;
+                
+                for (let i = startIndex; i < sectionMatches.length; i++) {
+                    const section = sectionMatches[i].trim();
+                    if (!section) continue;
+                    
+                    // Extract title from ## heading
+                    const titleMatch = section.match(/^##\s+(.+?)(?:\n|\r\n|$)/);
+                    if (!titleMatch) continue;
+                    
+                    const title = titleMatch[1].trim();
+                    const sectionContent = section.substring(titleMatch[0].length).trim();
+                    
+                    // Extract code block 
+                    const codeBlockMatch = sectionContent.match(/```(?:\w+)?\s*([\s\S]*?)```/);
+                    
+                    let description, code, hint;
+                    
+                    if (codeBlockMatch) {
+                        // Get text before code block as description
+                        const beforeCodeIndex = sectionContent.indexOf('```');
+                        description = sectionContent.substring(0, beforeCodeIndex).trim();
+                        
+                        // Get code from inside code block
+                        code = codeBlockMatch[1].trim();
+                        
+                        // Get text after code block as hint
+                        const afterCodeIndex = sectionContent.indexOf('```', beforeCodeIndex + 3);
+                        const endCodeIndex = sectionContent.indexOf('```', afterCodeIndex + 3);
+                        const endIndex = endCodeIndex > 0 ? endCodeIndex : sectionContent.length;
+                        hint = sectionContent.substring(afterCodeIndex + 3, endIndex).trim();
+                    } else {
+                        // No code block found
+                        description = sectionContent;
+                        code = "// No code provided for this section";
+                        hint = "Follow the instructions carefully.";
+                    }
+                    
+                    sections.push({
+                        title,
+                        description,
+                        code,
+                        hint
+                    });
+                }
+                
+                if (sections.length > 0) {
+                    return sections;
+                }
+                
+                // If we couldn't parse sections but found code blocks, extract them
+                const codeBlocks = [];
+                let codeBlockRegex = /```(?:\w+)?\s*([\s\S]*?)```/g;
+                let codeMatch;
+                
+                while ((codeMatch = codeBlockRegex.exec(content)) !== null) {
+                    codeBlocks.push({
+                        title: `Code Block ${codeBlocks.length + 1}`,
+                        description: "Implementation code:",
+                        code: codeMatch[1].trim(),
+                        hint: "Type the code exactly as shown."
+                    });
+                }
+                
+                if (codeBlocks.length > 0) {
+                    return codeBlocks;
+                }
+                
+                // If all else fails, return the entire content as a single section
+                return [defaultSection];
+            } catch (error) {
+                console.error("Error processing AI response:", error);
+                return [defaultSection];
+            }
+        }
+        function displayProjectStructure() {
+            // Display overview
+            let overviewHTML = '<h3>Project Sections:</h3><ul>';
+            projectStructure.forEach((section, index) => {
+                overviewHTML += `
+                    <li class="code-section">
+                        <h3>
+                            <span class="status-icon status-pending"></span>
+                            ${section.title}
+                        </h3>
+                    </li>
+                `;
+            });
+            overviewHTML += '</ul>';
+            projectSections.innerHTML = overviewHTML;
+            
+            // Display structure outline
+            let outlineHTML = '<ul>';
+            projectStructure.forEach(section => {
+                outlineHTML += `<li><strong>${section.title}:</strong> ${section.description}</li>`;
+            });
+            outlineHTML += '</ul>';
+            structureOutline.innerHTML = outlineHTML;
+        }
+
+        function updateSectionStatus(index, status) {
+            const sections = projectSections.querySelectorAll('.code-section');
+            
+            if (sections[index]) {
+                const statusIcon = sections[index].querySelector('.status-icon');
+                statusIcon.className = 'status-icon status-' + status;
+            }
+        }
+
+        function moveToNextSection() {
+            // Mark current section as complete if exists
+            if (currentSectionIndex >= 0) {
+                updateSectionStatus(currentSectionIndex, 'complete');
+            }
+            
+            // Move to next section
+            currentSectionIndex++;
+            
+            // Check if we still have sections
+            if (currentSectionIndex < projectStructure.length) {
+                const section = projectStructure[currentSectionIndex];
+                
+                // Update current task
+                currentTask.innerHTML = `
+                    <h3>${section.title}</h3>
+                    <p>${section.description}</p>
+                `;
+                
+                // Mark this section as active
+                updateSectionStatus(currentSectionIndex, 'active');
+                
+                // Reset editor for new section
+                codeEditor.value = '';
+                
+                // Set the complete code for the current section
+                completeCode = section.code;
+                
+                // Show first letter of ghost text
+                currentCompletionIndex = 0;
+                updateGhostText();
+                
+                // Reset progress bar
+                updateProgress(0);
+                
+                // Focus the editor
+                codeEditor.focus();
+            } else {
+                // Project complete
+                currentTask.innerHTML = `
+                    <h3>🎉 Project Complete!</h3>
+                    <p>You've successfully completed all sections of this project.</p>
+                `;
+                codeEditor.disabled = true;
+                skipBtn.disabled = true;
+            }
+        }
+        // Fix the updateGhostText function
+        function updateGhostText() {
+            // If we've reached the end of the code, hide ghost text
+            if (currentCompletionIndex >= completeCode.length) {
+                ghostText.textContent = '';
+                isGhostTextVisible = false;
+                return;
+            }
+            
+            // Get the position of the cursor in the editor to align ghost text
+            const userInput = codeEditor.value;
+            const userLines = userInput.split('\n');
+            const cursorPosition = {
+                top: codeEditor.scrollTop,
+                left: userLines.length > 0 ? (userLines[userLines.length - 1].length * 8) : 0 // Approximate character width
+            };
+            
+            // Get the next word or token to show
+            const remainingCode = completeCode.substring(currentCompletionIndex);
+            let nextWord = '';
+            
+            // Handle different types of tokens in code context
+            if (remainingCode[0].match(/\s/)) {
+                // If starting with whitespace, get all consecutive whitespace
+                let i = 0;
+                while (i < remainingCode.length && remainingCode[i].match(/\s/)) {
+                    nextWord += remainingCode[i];
+                    i++;
+                }
+            } else if (remainingCode[0].match(/[a-zA-Z0-9_$]/)) {
+                // If starting with alphanumeric or underscore (variable/keyword), get the whole word
+                let i = 0;
+                while (i < remainingCode.length && remainingCode[i].match(/[a-zA-Z0-9_$]/)) {
+                    nextWord += remainingCode[i];
+                    i++;
+                }
+            } else if (remainingCode.startsWith('//')) {
+                // Handle comments - show a small chunk at a time
+                nextWord = remainingCode.substring(0, Math.min(20, remainingCode.indexOf('\n') > -1 ? 
+                    remainingCode.indexOf('\n') : remainingCode.length));
+            } else if (remainingCode.startsWith('/*')) {
+                // Handle multi-line comments - show a small chunk
+                nextWord = '/*...*/';
+            } else if (remainingCode.startsWith('"') || remainingCode.startsWith("'") || remainingCode.startsWith("`")) {
+                // For string literals, show the string with quotes but limit length
+                const quote = remainingCode[0];
+                const endQuotePos = remainingCode.indexOf(quote, 1);
+                if (endQuotePos > -1 && endQuotePos < 20) {
+                    nextWord = remainingCode.substring(0, endQuotePos + 1);
+                } else {
+                    nextWord = remainingCode.substring(0, Math.min(10, remainingCode.length)) + '...';
+                }
+            } else {
+                // Special characters, operators, brackets, etc.
+                // Group common operators
+                const operators = ['+=', '-=', '*=', '/=', '==', '!=', '>=', '<=', '=>', '&&', '||', '===', '!=='];
+                
+                let matched = false;
+                for (const op of operators) {
+                    if (remainingCode.startsWith(op)) {
+                        nextWord = op;
+                        matched = true;
+                        break;
+                    }
+                }
+                
+                if (!matched) {
+                    // Single character token
+                    nextWord = remainingCode[0];
+                }
+            }
+            
+            // Display the next word/token
+            ghostText.textContent = userInput + nextWord;
+            ghostText.scrollTop = cursorPosition.top;
+            isGhostTextVisible = true;
+        }
+
+        // Update the callOpenAIAPI function to focus on actual code
+        async function callOpenAIAPI(prompt) {
+            try {
+                const response = await fetch('https://api.openai.com/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`
+                    },
+                    body: JSON.stringify({
+                        model: 'gpt-4',
+                        messages: [
+                            {
+                                role: 'system',
+                                content: `You are a coding assistant that provides actual implementation code with minimal setup instructions. 
+                                Focus on writing the code that solves the problem directly.
+                                
+                                Format your response as follows:
+                                
+                                ## Section Title
+                                Brief description of what this code does (1-2 sentences only).
+                                
+                                \`\`\`language
+                                // Actual implementation code here
+                                // Include comments only when necessary
+                                \`\`\`
+                                
+                                Hint: A short hint for this section
+                                
+                                Do NOT include lengthy explanations of environment setup, libraries to install, etc.
+                                Focus on writing clean, working implementation code.`
+                            },
+                            {
+                                role: 'user',
+                                content: `Generate implementation code for: ${prompt}. 
+                                Break it into logical sections (HTML structure, CSS styling, JS functionality, etc.).
+                                Provide only the actual code needed, not extensive explanations or environment setup.`
+                            }
+                        ],
+                        temperature: 0.7
+                    })
+                });
+                
+                if (!response.ok) {
+                    let errorMessage = `API request failed with status ${response.status}`;
+                    try {
+                        const errorData = await response.json();
+                        errorMessage = errorData.error?.message || errorMessage;
+                    } catch (e) {
+                        // Ignore JSON parsing errors for error response
+                    }
+                    throw new Error(errorMessage);
+                }
+                
+                const data = await response.json();
+                
+                // Get content from response
+                const content = data.choices[0].message.content;
+                
+                // Process the content into our expected format
+                return processOpenAIResponse(content);
+            } catch (error) {
+                throw new Error(`OpenAI API error: ${error.message}`);
+            }
+        }
+
+        // Update the handleCodeEditorInput function for better feedback
+        function handleCodeEditorInput(e) {
+            if (!completeCode) return;
+            
+            const userInput = codeEditor.value;
+            
+            // Check if the user typed the correct text so far
+            if (userInput.length > 0 && completeCode.startsWith(userInput)) {
+                // User typed correctly
+                currentCompletionIndex = userInput.length;
+                updateGhostText();
+                
+                // Update progress
+                const progress = (currentCompletionIndex / completeCode.length) * 100;
+                updateProgress(progress);
+                
+                // Check if section is complete
+                if (currentCompletionIndex === completeCode.length) {
+                    // Wait a bit before showing completion message
+                    setTimeout(() => {
+                        showCompletionMessage();
+                    }, 500);
+                }
+            } else {
+                // User typed incorrectly
+                // Highlight in red or provide feedback
+                const lastGoodIndex = findLastMatchingIndex(userInput, completeCode);
+                
+                // If there's a mistake, show the correct next characters
+                if (lastGoodIndex < userInput.length) {
+                    // Optional: provide visual feedback that something is wrong
+                    // For example, flash the editor border red
+                    codeEditor.style.borderColor = '#ef4444';
+                    
+                    // Reset after a short delay
+                    setTimeout(() => {
+                        codeEditor.style.borderColor = '#ccc';
+                    }, 500);
+                }
+            }
+        }
+        
+        // Helper function to find the last matching index between two strings
+        function findLastMatchingIndex(input, target) {
+            for (let i = input.length; i > 0; i--) {
+                if (target.startsWith(input.substring(0, i))) {
+                    return i;
+                }
+            }
+            return 0;
+        }
+
+        function showCompletionMessage() {
+            currentTask.innerHTML += `
+                <div class="hint">
+                    <strong>Great job!</strong> You've completed this section. Click "Skip to Next" to continue.
+                </div>
+            `;
+        }
+
+        function updateProgress(percentage) {
+            progressBar.style.width = `${percentage}%`;
+        }
+
+        function runCode() {
+            // In a real app, this would execute the code safely
+            // For this demo, we'll just display the code
+            
+            const userCode = codeEditor.value;
+            
+            // Simple HTML/CSS/JS handling for demo
+            if (userCode.includes('<html>') || userCode.includes('<!DOCTYPE html>')) {
+                try {
+                    // Create iframe to display HTML
+                    outputDisplay.innerHTML = '';
+                    const iframe = document.createElement('iframe');
+                    iframe.style.width = '100%';
+                    iframe.style.height = '100%';
+                    iframe.style.border = 'none';
+                    outputDisplay.appendChild(iframe);
+                    
+                    // Write content to iframe
+                    const doc = iframe.contentDocument || iframe.contentWindow.document;
+                    doc.open();
+                    doc.write(userCode);
+                    doc.close();
+                } catch (error) {
+                    outputDisplay.textContent = `Error: ${error.message}`;
+                }
+            } else if (userCode.includes('function')) {
+                // Simulate JavaScript execution
+                try {
+                    outputDisplay.textContent = 'JavaScript code executed successfully!';
+                } catch (error) {
+                    outputDisplay.textContent = `Error: ${error.message}`;
+                }
+            } else {
+                // Default output
+                outputDisplay.textContent = userCode;
+            }
+        }
+
+        function showHint() {
+            const section = projectStructure[currentSectionIndex];
+            
+            if (!section) return;
+            
+
+            currentTask.innerHTML += `
+                <div class="hint">
+                    <strong>Hint:</strong> ${section.hint || 'Look at the ghost text for guidance. Type character by character to follow along.'}
+                </div>
+            `;
+            
+            if (currentCompletionIndex < completeCode.length) {
+                const nextFewChars = completeCode.substring(
+                    currentCompletionIndex, 
+                    Math.min(currentCompletionIndex + 5, completeCode.length)
+                );
+                
+                currentTask.innerHTML += `
+                    <div class="hint">
+                        <strong>Next few characters:</strong> <code>${nextFewChars}</code>
+                    </div>
+                `;
+            }
+        }
+    </script>
 </body>
 </html>
